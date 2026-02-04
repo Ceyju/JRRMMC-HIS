@@ -7,11 +7,11 @@ use App\Http\Controllers\LoginController;
 
 //Web Routes
 
-// Route::get('/', function () {
-//     return Inertia::render('welcome', [
-//         'canRegister' => Features::enabled(Features::registration()),
-//     ]);
-// })->name('home');
+Route::get('/', function () {
+    return Inertia::render('welcome', [
+        'canRegister' => Features::enabled(Features::registration()),
+    ]);
+})->name('home');
 
 // Log-in Routes
 Route::post('/login', [LoginController::class, 'login'])->name('login.submit');
@@ -36,10 +36,10 @@ Route::get('patrecord', function () {
 //REGISTRIES ROUTES
 Route::get('trauma', function () {
     return Inertia::render('trauma');
-})->middleware(['auth'])->name('trauma');
+})->middleware(['auth', 'verified'])->name('trauma');
 
 Route::get('cancer', function () {
-    return Inertia::render('cancer');
-})->middleware(['auth'])->name('cancer');
+    return Inertia::render('registries/Cancer/cancerRegistry');
+})->middleware(['auth', 'verified'])->name('cancer');
 
 require __DIR__.'/settings.php';
