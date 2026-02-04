@@ -6,16 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowUpDown } from 'lucide-react';
 import AppLayout from '@/layouts/app-layout';
-import { cancer, dashboard } from '@/routes';
+import { cancer } from '@/routes';
 import type { BreadcrumbItem } from '@/types';
 import { TableSkeleton } from '@/components/skeleton-table';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard().url,
-    },
     {
         title: 'Cancer Registry',
         href: cancer().url,
@@ -27,9 +23,13 @@ type Patient = {
     name: string;
     age: number;
     diagnosis: string;
-    stage: string;
+    stage: CancerStage;
     dateRegistered: string;
+    followUpStatus: FollowUpStatus;
 };
+
+export type CancerStage = 'Stage I' | 'Stage II' | 'Stage III' | 'Stage IV';
+export type FollowUpStatus = 'Form 4 - Initial Follow Up' | 'Form 2' | 'Form 1';
 
 const columns: ColumnDef<Patient>[] = [
     {
@@ -62,6 +62,10 @@ const columns: ColumnDef<Patient>[] = [
         accessorKey: 'dateRegistered',
         header: 'Date Registered',
     },
+    {
+        accessorKey: 'followUpStatus',
+        header: 'Follow Up Status',
+    },
 ];
 
 export default function CancerRegistry() {
@@ -81,6 +85,7 @@ export default function CancerRegistry() {
                     diagnosis: 'Lung Cancer',
                     stage: 'Stage II',
                     dateRegistered: '2024-01-15',
+                    followUpStatus: 'Form 4 - Initial Follow Up',
                 },
                 {
                     id: '2',
@@ -89,6 +94,7 @@ export default function CancerRegistry() {
                     diagnosis: 'Breast Cancer',
                     stage: 'Stage III',
                     dateRegistered: '2024-02-20',
+                    followUpStatus: 'Form 2',
                 },
                 {
                     id: '3',
@@ -97,6 +103,7 @@ export default function CancerRegistry() {
                     diagnosis: 'Colon Cancer',
                     stage: 'Stage I',
                     dateRegistered: '2024-03-10',
+                    followUpStatus: 'Form 1',
                 },
             ]);
             setIsLoading(false);
@@ -144,7 +151,6 @@ export default function CancerRegistry() {
                 ) : (
                     <div className="rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
                         <Table>
-                            <TableCaption>A list of cancer registry patients.</TableCaption>
                             <TableHeader>
                                 {table.getHeaderGroups().map((headerGroup) => (
                                     <TableRow key={headerGroup.id}>
