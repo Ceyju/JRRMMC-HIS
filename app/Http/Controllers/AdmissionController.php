@@ -8,14 +8,35 @@ use App\Models\AdmissionModel;
 class AdmissionController extends Controller
 {
     // GET /admissions - GET ALL
-    public function index()
-    {
-        $admissions = AdmissionModel::select('enccode', 'hpercode')->get();
-        
-        return response()->json([
-            'data' => $admissions,
-        ]);
+
+    public function index(Request $request)
+{
+    $perPage = $request->get('per_page', 100);
+    $page = $request->get('page', 1);
+    $search = $request->get('search', '');
+
+    $query = AdmissionModel::select('enccode', 'hpercode');
+
+    // Apply search filter if provided
+    if ($search) {
+        $query->where(function($q) use ($search) {
+            $q->where('enccode', 'like', "%{$search}%")
+              ->orWhere('hpercode', 'like', "%{$search}%");
+        });
     }
+
+    $admissions = $query->paginate($perPage, ['*'], 'page', $page);
+
+    return response()->json([
+        'data' => $admissions->items(),
+        'current_page' => $admissions->currentPage(),
+        'last_page' => $admissions->lastPage(),
+        'per_page' => $admissions->perPage(),
+        'total' => $admissions->total(),
+        'from' => $admissions->firstItem(),
+        'to' => $admissions->lastItem(),
+    ]);
+}
 
     // GET /admissions/create - Show form to create new admission
     public function create()

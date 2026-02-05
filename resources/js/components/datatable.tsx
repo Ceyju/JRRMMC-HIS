@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ColumnDef, ColumnFiltersState, SortingState, VisibilityState, flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table';
+import { ColumnDef, ColumnFiltersState, SortingState, VisibilityState, flexRender, getCoreRowModel, getFilteredRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -19,6 +19,16 @@ interface DataTableProps<TData, TValue> {
         filterKey: string;
         filterValue?: string;
     }[];
+    // Server-side pagination props
+    manualPagination?: boolean;
+    pageCount?: number;
+    currentPage?: number;
+    onPageChange?: (page: number) => void;
+    perPage?: number;
+    onPerPageChange?: (perPage: number) => void;
+    total?: number;
+    loading?: boolean;
+    onSearchChange?: (search: string) => void;
 }
 
 export function DataTable<TData, TValue>({
@@ -27,6 +37,15 @@ export function DataTable<TData, TValue>({
     filterColumn,
     filterPlaceholder = 'Filter...',
     tabs,
+    manualPagination = false,
+    pageCount = 1,
+    currentPage = 1,
+    onPageChange,
+    perPage = 100,
+    onPerPageChange,
+    total = 0,
+    loading = false,
+    onSearchChange,
 }: DataTableProps<TData, TValue>) {
     const [sorting, setSorting] = useState<SortingState>([]);
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -38,13 +57,15 @@ export function DataTable<TData, TValue>({
         data,
         columns,
         getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
+        getPaginationRowModel: manualPagination ? undefined : () => ({ rows: data, rowsById: {} }),
         getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
+        getFilteredRowModel: manualPagination ? undefined : getFilteredRowModel(),
         onSortingChange: setSorting,
         onColumnFiltersChange: setColumnFilters,
         onColumnVisibilityChange: setColumnVisibility,
         onRowSelectionChange: setRowSelection,
+        manualPagination,
+        pageCount,
         state: {
             sorting,
             columnFilters,
@@ -60,7 +81,6 @@ export function DataTable<TData, TValue>({
         if (tab && tab.filterValue) {
             table.getColumn(tab.filterKey)?.setFilterValue(tab.filterValue);
         } else {
-            // clear filter for "All" tab
             tabs?.forEach(t => {
                 table.getColumn(t.filterKey)?.setFilterValue(undefined);
             });
@@ -69,50 +89,30 @@ export function DataTable<TData, TValue>({
 
     const getFilteredRowCount = (tab: { filterKey: string; filterValue?: string }) => {
         if (!tab.filterValue) {
-            return data.length;
+            return manualPagination ? total : data.length;
         }
         return data.filter((row: any) => row[tab.filterKey] === tab.filterValue).length;
     };
 
     const TableContent = () => (
         <>
-
-        {/* search patient and column */}
+            {/* search patient and column */}
             <div className="flex items-center justify-between p-4 border-b">
                 {filterColumn && (
                     <Input
                         placeholder={filterPlaceholder}
                         value={(table.getColumn(filterColumn)?.getFilterValue() as string) ?? ''}
-                        onChange={(event) =>
-                            table.getColumn(filterColumn)?.setFilterValue(event.target.value)
-                        }
+                        onChange={(event) => {
+                            const value = event.target.value;
+                            table.getColumn(filterColumn)?.setFilterValue(value);
+                            // Call server-side search if enabled
+                            if (manualPagination && onSearchChange) {
+                                onSearchChange(value);
+                            }
+                        }}
                         className="max-w-sm"
                     />
                 )}
-                {/* <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="ml-auto">
-                            Columns <ChevronDown className="ml-2 h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        {table
-                            .getAllColumns()
-                            .filter((column) => column.getCanHide())
-                            .map((column) => {
-                                return (
-                                    <DropdownMenuCheckboxItem
-                                        key={column.id}
-                                        className="capitalize"
-                                        checked={column.getIsVisible()}
-                                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                                    >
-                                        {column.id}
-                                    </DropdownMenuCheckboxItem>
-                                );
-                            })}
-                    </DropdownMenuContent>
-                </DropdownMenu> */}
             </div>
 
             {/* main table */}
@@ -137,7 +137,13 @@ export function DataTable<TData, TValue>({
                         ))}
                     </TableHeader>
                     <TableBody>
-                        {table.getRowModel().rows?.length ? (
+                        {loading ? (
+                            <TableRow>
+                                <TableCell colSpan={columns.length} className="h-24 text-center">
+                                    Loading...
+                                </TableCell>
+                            </TableRow>
+                        ) : table.getRowModel().rows?.length ? (
                             table.getRowModel().rows.map((row) => (
                                 <TableRow
                                     key={row.id}
@@ -169,28 +175,93 @@ export function DataTable<TData, TValue>({
 
             {/* table footer -- pagination */}
             <div className="flex items-center justify-between space-x-2 p-4 border-t">
-                <div className="flex-1 text-sm text-muted-foreground">
-                    Showing {table.getFilteredRowModel().rows.length > 0 ? '1' : '0'}-{table.getRowModel().rows.length} of{' '}
-                    {table.getFilteredRowModel().rows.length} entries
-                </div>
-                <div className="flex items-center space-x-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                    >
-                        Previous
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                    >
-                        Next
-                    </Button>
-                </div>
+                {manualPagination ? (
+                    <>
+                        <div className="flex items-center space-x-2">
+                            <p className="text-sm text-muted-foreground">Rows per page:</p>
+                            <select
+                                value={perPage}
+                                onChange={(e) => {
+                                    if (onPerPageChange) {
+                                        onPerPageChange(Number(e.target.value));
+                                    }
+                                }}
+                                className="h-8 w-[70px] rounded-md border bg-background px-2 text-sm"
+                            >
+                                {[50, 100, 200, 500].map((size) => (
+                                    <option key={size} value={size}>
+                                        {size}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-sm text-muted-foreground">
+                                Showing {data.length} of {total.toLocaleString()} entries
+                            </p>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onPageChange?.(1)}
+                                disabled={currentPage === 1 || loading}
+                            >
+                                First
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onPageChange?.(currentPage - 1)}
+                                disabled={currentPage === 1 || loading}
+                            >
+                                Previous
+                            </Button>
+                            <span className="text-sm">
+                                Page {currentPage} of {pageCount}
+                            </span>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onPageChange?.(currentPage + 1)}
+                                disabled={currentPage === pageCount || loading}
+                            >
+                                Next
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onPageChange?.(pageCount)}
+                                disabled={currentPage === pageCount || loading}
+                            >
+                                Last
+                            </Button>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="flex-1 text-sm text-muted-foreground">
+                            Showing {table.getFilteredRowModel().rows.length > 0 ? '1' : '0'}-{table.getRowModel().rows.length} of{' '}
+                            {table.getFilteredRowModel().rows.length} entries
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => table.previousPage()}
+                                disabled={!table.getCanPreviousPage()}
+                            >
+                                Previous
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => table.nextPage()}
+                                disabled={!table.getCanNextPage()}
+                            >
+                                Next
+                            </Button>
+                        </div>
+                    </>
+                )}
             </div>
         </>
     );
