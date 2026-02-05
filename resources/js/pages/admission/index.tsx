@@ -1,14 +1,13 @@
 import { Head } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getPaginationRowModel, getSortedRowModel, SortingState, getFilteredRowModel, ColumnFiltersState } from '@tanstack/react-table';
+import { ColumnDef } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { ArrowUpDown } from 'lucide-react';
 import AppLayout from '@/layouts/app-layout';
 import { admission } from '@/routes';
 import type { BreadcrumbItem } from '@/types';
 import axios from 'axios';
+import { DataTable } from '@/components/datatable';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -56,16 +55,31 @@ const columns: ColumnDef<AdmissionLog>[] = [
 export default function AdmissionIndex() {
     const [data, setData] = useState<AdmissionLog[]>([]);
     const [loading, setLoading] = useState(true);
-    const [sorting, setSorting] = useState<SortingState>([]);
-    const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-    const [globalFilter, setGlobalFilter] = useState(''); 
+    const [globalFilter, setGlobalFilter] = useState('');
+    
+    // Server-side pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [lastPage, setLastPage] = useState(1);
+    const [total, setTotal] = useState(0);
+    const [perPage, setPerPage] = useState(100);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
                 setLoading(true);
-                const response = await axios.get('/admission/index');
+                const response = await axios.get('/admission/index', {
+                    params: {
+                        page: currentPage,
+                        per_page: perPage,
+                        search: globalFilter,
+                    }
+                });
+                
                 setData(response.data.data);
+                setCurrentPage(response.data.current_page);
+                setLastPage(response.data.last_page);
+                setTotal(response.data.total);
+                setPerPage(response.data.per_page);
             } catch (error) {
                 console.error('Error fetching admission data:', error);
             } finally {
@@ -73,116 +87,46 @@ export default function AdmissionIndex() {
             }
         };
 
-        fetchData();
-    }, []);
+        const timeoutId = setTimeout(() => {
+            fetchData();
+        }, 300);
 
-    const table = useReactTable({
-        data,
-        columns,
-        getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
-        getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        onSortingChange: setSorting,
-        onColumnFiltersChange: setColumnFilters,
-        onGlobalFilterChange: setGlobalFilter,
-        state: {
-            sorting,
-            columnFilters,
-            globalFilter,
-        },
-    });
+        return () => clearTimeout(timeoutId);
+    }, [currentPage, perPage, globalFilter]);
+
+    const handleSearchChange = (search: string) => {
+        setGlobalFilter(search);
+        setCurrentPage(1); // Reset to first page on search
+    };
+
+    const handlePageChange = (page: number) => {
+        setCurrentPage(page);
+    };
+
+    const handlePerPageChange = (newPerPage: number) => {
+        setPerPage(newPerPage);
+        setCurrentPage(1);
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Admission Log" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <div className="mb-4">
-                    <Input
-                        placeholder="Search admissions..."
-                        value={globalFilter ?? ''}
-                        onChange={(event) => setGlobalFilter(event.target.value)}
-                        className="max-w-sm"
-                    />
-                </div>
-                <div className="rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                    <Table>
-                        <TableCaption>ADMISSION LOG</TableCaption>
-                        <TableHeader>
-                            {table.getHeaderGroups().map((headerGroup) => (
-                                <TableRow key={headerGroup.id}>
-                                    {headerGroup.headers.map((header) => {
-                                        return (
-                                            <TableHead key={header.id}>
-                                                {header.isPlaceholder
-                                                    ? null
-                                                    : flexRender(
-                                                          header.column.columnDef.header,
-                                                          header.getContext()
-                                                      )}
-                                            </TableHead>
-                                        );
-                                    })}
-                                </TableRow>
-                            ))}
-                        </TableHeader>
-                        <TableBody>
-                            {loading ? (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={columns.length}
-                                        className="h-24 text-center"
-                                    >
-                                        Loading...
-                                    </TableCell>
-                                </TableRow>
-                            ) : table.getRowModel().rows?.length ? (
-                                table.getRowModel().rows.map((row) => (
-                                    <TableRow
-                                        key={row.id}
-                                        data-state={row.getIsSelected() && 'selected'}
-                                    >
-                                        {row.getVisibleCells().map((cell) => (
-                                            <TableCell key={cell.id}>
-                                                {flexRender(
-                                                    cell.column.columnDef.cell,
-                                                    cell.getContext()
-                                                )}
-                                            </TableCell>
-                                        ))}
-                                    </TableRow>
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={columns.length}
-                                        className="h-24 text-center"
-                                    >
-                                        No results.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
-                <div className="flex items-center justify-end space-x-2 py-4">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                    >
-                        Previous
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                    >
-                        Next
-                    </Button>
-                </div>
+            <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
+                <DataTable
+                    columns={columns}
+                    data={data}
+                    filterColumn="enccode"
+                    filterPlaceholder="Search admissions..."
+                    manualPagination={true}
+                    pageCount={lastPage}
+                    currentPage={currentPage}
+                    onPageChange={handlePageChange}
+                    perPage={perPage}
+                    onPerPageChange={handlePerPageChange}
+                    total={total}
+                    loading={loading}
+                    onSearchChange={handleSearchChange}
+                />
             </div>
         </AppLayout>
     );
